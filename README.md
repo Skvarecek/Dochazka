@@ -133,6 +133,7 @@ attendance-app/
 
 ---
 
+
 ## 🔐 Role a oprávnění
 
 - **employee** – vidí jen svá data, může podávat žádosti o absenci
