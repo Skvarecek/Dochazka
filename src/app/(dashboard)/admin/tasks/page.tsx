@@ -466,10 +466,14 @@ function BoardCard({ task, overlay = false }: { task: any; overlay?: boolean }) 
         <GripVertical className="w-4 h-4 text-ink-300 flex-shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
           <p className={`font-medium text-sm text-ink-900 ${muted ? "line-through" : ""}`}>{task.title}</p>
-          <div className="flex items-center gap-2 flex-wrap mt-1.5">
-            <PriorityBadge priority={task.priority} />
-            {due && !muted && <span className={`text-xs flex items-center gap-1 ${due.cls}`}><Calendar className="w-3 h-3" />{due.text}</span>}
-          </div>
+          {st !== "cancelled" && (
+            <div className="flex items-center gap-2 flex-wrap mt-1.5">
+              {st === "done"
+                ? <span className="badge border bg-emerald-100 text-emerald-700 border-emerald-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>Hotovo</span>
+                : <PriorityBadge priority={task.priority} />}
+              {due && !muted && <span className={`text-xs flex items-center gap-1 ${due.cls}`}><Calendar className="w-3 h-3" />{due.text}</span>}
+            </div>
+          )}
           {task.projects?.name && <p className="text-xs text-ink-400 flex items-center gap-1 mt-1"><Building2 className="w-3 h-3" />{task.projects.name}</p>}
         </div>
       </div>
