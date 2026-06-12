@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
-import { Clock, LogIn, UserPlus, ArrowRight } from "lucide-react";
+import { LogIn, UserPlus, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -65,9 +65,8 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         {/* Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-600 text-white mb-4 shadow-lg shadow-brand-300/50">
-            <Clock className="w-8 h-8" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/inex-logo-dark.png" alt="INEX-CZ" className="h-12 w-auto mx-auto mb-4" />
           <h1 className="text-3xl font-display font-bold text-ink-900">
             Docházka
           </h1>

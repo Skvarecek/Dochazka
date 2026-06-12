@@ -44,7 +44,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {sidebarOpen && <div className="fixed inset-0 z-30 bg-ink-900/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
       <aside className={cn("fixed z-40 inset-y-0 left-0 w-72 bg-white border-r border-surface-200 flex flex-col transition-transform duration-300 ease-out lg:translate-x-0 lg:static lg:z-auto", sidebarOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex items-center gap-3 px-6 h-16 border-b border-surface-200">
-          <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center"><Clock className="w-5 h-5 text-white" /></div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/inex-logo-dark.png" alt="INEX-CZ" className="h-8 w-auto" />
           <div><span className="font-display font-bold text-lg text-ink-900">INEX-CZ</span><p className="text-[10px] text-ink-400 -mt-0.5">Docházkový systém</p></div>
           <button onClick={() => setSidebarOpen(false)} className="ml-auto lg:hidden text-ink-500"><X className="w-5 h-5" /></button>
         </div>
