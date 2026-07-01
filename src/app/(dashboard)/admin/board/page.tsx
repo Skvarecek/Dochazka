@@ -24,6 +24,7 @@ export default function BoardPage() {
   const [formLocation, setFormLocation] = useState("");
   const [formNote, setFormNote] = useState("");
   const [formBonusPercent, setFormBonusPercent] = useState("100");
+  const [formDriverHours, setFormDriverHours] = useState("0");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { loadData(); }, [currentMonth]);
@@ -74,11 +75,13 @@ export default function BoardPage() {
       setFormLocation(entry.location || "");
       setFormNote(entry.note || "");
       setFormBonusPercent(String(entry.bonus_percent || 100));
+      setFormDriverHours(String(Number(entry.driver_hours) || 0));
     } else {
       setFormHours("8");
       setFormType(holidayName ? "holiday" : "work");
       setFormProject(""); setFormLocation(""); setFormNote("");
       setFormBonusPercent("100");
+      setFormDriverHours("0");
     }
     setEditing({ userId, date, entry });
   }
@@ -93,6 +96,7 @@ export default function BoardPage() {
       location: formType === "work" ? (formLocation || null) : null,
       note: formNote || null,
       bonus_percent: formType === "holiday" ? parseFloat(formBonusPercent) : 100,
+      driver_hours: formType === "work" ? parseFloat(formDriverHours) || 0 : 0,
     };
     if (editing.entry) await supabase.from("work_entries").update(data).eq("id", editing.entry.id);
     else await supabase.from("work_entries").insert(data);
@@ -106,7 +110,7 @@ export default function BoardPage() {
   }
 
   function cellContent(entry: any) {
-    if (!entry) return { hours: "", location: "", cls: "text-ink-200 hover:bg-brand-50/50 cursor-pointer" };
+    if (!entry) return { hours: "", driver: 0, location: "", cls: "text-ink-200 hover:bg-brand-50/50 cursor-pointer" };
     const short = entryTypeShort(entry.entry_type);
     if (short) {
       const colors: Record<string, string> = {
@@ -115,9 +119,9 @@ export default function BoardPage() {
         day_off: "text-purple-600 font-semibold cursor-pointer hover:bg-purple-50",
         holiday: "text-red-600 font-semibold cursor-pointer hover:bg-red-50",
       };
-      return { hours: short, location: "", cls: colors[entry.entry_type] || "cursor-pointer" };
+      return { hours: short, driver: 0, location: "", cls: colors[entry.entry_type] || "cursor-pointer" };
     }
-    return { hours: String(Number(entry.hours)), location: entry.projects?.name || entry.location || "", cls: "cursor-pointer hover:bg-blue-50" };
+    return { hours: String(Number(entry.hours)), driver: Number(entry.driver_hours) || 0, location: entry.projects?.name || entry.location || "", cls: "cursor-pointer hover:bg-blue-50" };
   }
 
   const empName = (id: string) => allEmployees.find(e => e.id === id)?.full_name || "";
@@ -158,7 +162,7 @@ export default function BoardPage() {
             })}
           </div>
           <div className="flex gap-4 mt-3 text-[10px] text-ink-400">
-            <span>D = Dovolená</span><span>N = Nemoc</span><span>V = Volno</span><span className="text-red-500 font-semibold">S = Svátek</span>
+            <span>D = Dovolená</span><span>N = Nemoc</span><span>V = Volno</span><span className="text-red-500 font-semibold">S = Svátek</span><span className="text-sky-600 font-semibold">+h = řízení</span>
             <span className="inline-block w-3 h-3 bg-red-50 border border-red-200 rounded"></span><span>= český svátek</span>
             <span className="inline-block w-3 h-3 bg-surface-200 rounded"></span><span>= víkend</span>
           </div>
@@ -219,6 +223,7 @@ export default function BoardPage() {
                             {cell.hours ? (
                               <div className="leading-tight">
                                 <span className="font-semibold">{cell.hours}</span>
+                                {cell.driver > 0 && <span className="text-sky-600 font-semibold">+{cell.driver}</span>}
                                 {cell.location && <div className="text-ink-400 text-[9px] truncate max-w-[100px] mx-auto">{cell.location}</div>}
                               </div>
                             ) : <span className="text-ink-200">·</span>}
@@ -233,12 +238,14 @@ export default function BoardPage() {
                   {employees.map(emp => {
                     const empEntries = entries.filter(e => e.user_id === emp.id);
                     const workH = empEntries.filter(e => e.entry_type === "work").reduce((s, e) => s + Number(e.hours), 0);
+                    const driverH = empEntries.reduce((s, e) => s + Number(e.driver_hours || 0), 0);
                     const holidayH = empEntries.filter(e => e.entry_type === "holiday").reduce((s, e) => s + Number(e.hours), 0);
                     const vacD = empEntries.filter(e => e.entry_type === "vacation").length;
                     const sickD = empEntries.filter(e => e.entry_type === "sick").length;
                     return (
                       <td key={emp.id} className="px-1 py-2 text-center border-r border-surface-100">
                         <div className="text-ink-900">{workH}h</div>
+                        {driverH > 0 && <div className="text-sky-600 text-[10px]">🚗 {driverH}h</div>}
                         {holidayH > 0 && <div className="text-red-600 text-[10px]">{holidayH}h S</div>}
                         {vacD > 0 && <div className="text-emerald-600 text-[10px]">{vacD}× D</div>}
                         {sickD > 0 && <div className="text-amber-600 text-[10px]">{sickD}× N</div>}
@@ -286,6 +293,7 @@ export default function BoardPage() {
                     <option value="">--</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select></div>
                   <div><label className="label text-xs">Místo</label><input type="text" className="input" value={formLocation} onChange={e => setFormLocation(e.target.value)} /></div>
+                  <div><label className="label text-xs">🚗 Řízení (h) — 0 = neřídil</label><input type="number" className="input" value={formDriverHours} onChange={e => setFormDriverHours(e.target.value)} min="0" max="12" step="0.5" /></div>
                 </>}
                 <div><label className="label text-xs">Poznámka</label><input type="text" className="input" value={formNote} onChange={e => setFormNote(e.target.value)} /></div>
                 <div className="flex gap-2">

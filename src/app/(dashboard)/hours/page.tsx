@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import { formatDate, entryTypeLabel, entryTypeColor, toDateStr } from "@/lib/utils";
-import { Plus, X, Trash2, Clock, ChevronLeft, ChevronRight, Pencil, Save, Users, AlertTriangle } from "lucide-react";
+import { Plus, X, Trash2, Clock, ChevronLeft, ChevronRight, Pencil, Save, Users, AlertTriangle, Car, Check } from "lucide-react";
 import { startOfMonth, endOfMonth, addMonths, subMonths, format } from "date-fns";
 import { cs } from "date-fns/locale";
 
@@ -23,6 +23,8 @@ export default function HoursPage() {
   const [formProject, setFormProject] = useState("");
   const [formLocation, setFormLocation] = useState("");
   const [formNote, setFormNote] = useState("");
+  const [formDriver, setFormDriver] = useState(false);
+  const [formDriverHours, setFormDriverHours] = useState("1");
   const [formUserId, setFormUserId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -30,6 +32,7 @@ export default function HoursPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHours, setEditHours] = useState("");
   const [editNote, setEditNote] = useState("");
+  const [editDriverHours, setEditDriverHours] = useState("0");
 
   useEffect(() => { loadInitial(); }, []);
   useEffect(() => { if (selectedUserId) loadEntries(); }, [currentMonth, selectedUserId]);
@@ -74,16 +77,19 @@ export default function HoursPage() {
     const { error } = await supabase.from("work_entries").insert({
       user_id: targetUserId, date: formDate, hours: parseFloat(formHours),
       entry_type: formType, project_id: formProject || null, location: formLocation || null, note: formNote || null,
+      driver_hours: formType === "work" && formDriver ? parseFloat(formDriverHours) || 0 : 0,
     });
     if (error) { setSubmitError(error.message); }
-    else { setShowForm(false); setFormHours("8"); setFormType("work"); setFormProject(""); setFormLocation(""); setFormNote(""); loadEntries(); }
+    else { setShowForm(false); setFormHours("8"); setFormType("work"); setFormProject(""); setFormLocation(""); setFormNote(""); setFormDriver(false); setFormDriverHours("1"); loadEntries(); }
     setSubmitting(false);
   }
 
   async function handleDelete(id: string) { if (!confirm("Smazat?")) return; await supabase.from("work_entries").delete().eq("id", id); loadEntries(); }
 
-  async function handleEditSave(id: string) {
-    await supabase.from("work_entries").update({ hours: parseFloat(editHours), note: editNote || null }).eq("id", id);
+  async function handleEditSave(id: string, isWork: boolean) {
+    const payload: any = { hours: parseFloat(editHours), note: editNote || null };
+    if (isWork) payload.driver_hours = parseFloat(editDriverHours) || 0;
+    await supabase.from("work_entries").update(payload).eq("id", id);
     setEditingId(null); loadEntries();
   }
 
@@ -91,6 +97,7 @@ export default function HoursPage() {
   const canEdit = isAdmin || !isLocked;
   const totalWork = entries.filter(e => e.entry_type === "work").reduce((s, e) => s + Number(e.hours), 0);
   const totalOther = entries.filter(e => e.entry_type !== "work").reduce((s, e) => s + Number(e.hours), 0);
+  const totalDriver = entries.reduce((s, e) => s + Number(e.driver_hours || 0), 0);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -115,7 +122,7 @@ export default function HoursPage() {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="card p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Clock className="w-5 h-5 text-blue-600" /></div><div><p className="text-xs text-ink-500">Práce</p><p className="text-xl font-display font-bold text-ink-900">{totalWork} h</p></div></div>
+        <div className="card p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Clock className="w-5 h-5 text-blue-600" /></div><div><p className="text-xs text-ink-500">Práce</p><p className="text-xl font-display font-bold text-ink-900">{totalWork} h</p>{totalDriver > 0 && <p className="text-xs text-sky-600 flex items-center gap-1"><Car className="w-3 h-3" /> +{totalDriver} h řízení</p>}</div></div>
         <div className="card p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center"><Clock className="w-5 h-5 text-purple-600" /></div><div><p className="text-xs text-ink-500">Ostatní</p><p className="text-xl font-display font-bold text-ink-900">{totalOther} h</p></div></div>
       </div>
 
@@ -130,10 +137,25 @@ export default function HoursPage() {
               <div><label className="label">Hodiny</label><input type="number" className="input" value={formHours} onChange={e => setFormHours(e.target.value)} min="0.5" max="24" step="0.5" required /></div>
               <div><label className="label">Typ</label><select className="input" value={formType} onChange={e => setFormType(e.target.value)}><option value="work">Práce</option><option value="vacation">Dovolená</option><option value="sick">Nemoc</option><option value="day_off">Volno</option><option value="holiday">Svátek</option></select></div>
             </div>
-            {formType === "work" && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><label className="label">Zakázka</label><select className="input" value={formProject} onChange={e => setFormProject(e.target.value)}><option value="">--</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.address ? ` (${p.address})` : ""}</option>)}</select></div>
-              <div><label className="label">Místo</label><input type="text" className="input" value={formLocation} onChange={e => setFormLocation(e.target.value)} /></div>
-            </div>}
+            {formType === "work" && <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label className="label">Zakázka</label><select className="input" value={formProject} onChange={e => setFormProject(e.target.value)}><option value="">--</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}{p.address ? ` (${p.address})` : ""}</option>)}</select></div>
+                <div><label className="label">Místo</label><input type="text" className="input" value={formLocation} onChange={e => setFormLocation(e.target.value)} /></div>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button type="button" onClick={() => setFormDriver(!formDriver)} aria-pressed={formDriver}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-medium transition-all ${formDriver ? "bg-sky-50 border-sky-400 text-sky-700" : "bg-white border-surface-300 text-ink-500 hover:border-surface-400"}`}>
+                  <Car className="w-5 h-5" /> Řídil jsem
+                  {formDriver && <Check className="w-4 h-4" />}
+                </button>
+                {formDriver && (
+                  <div className="flex items-center gap-2 animate-in">
+                    <label className="text-sm text-ink-500">Hodiny za volantem:</label>
+                    <input type="number" className="input w-24" value={formDriverHours} onChange={e => setFormDriverHours(e.target.value)} min="0.5" max="12" step="0.5" />
+                  </div>
+                )}
+              </div>
+            </>}
             <div><label className="label">Poznámka</label><textarea className="input min-h-[60px] resize-y" value={formNote} onChange={e => setFormNote(e.target.value)} /></div>
             <button type="submit" disabled={submitting} className="btn-primary">{submitting ? "Ukládání..." : "Uložit"}</button>
           </form>
@@ -151,8 +173,14 @@ export default function HoursPage() {
                     <div className="w-20 text-xs text-ink-500">{formatDate(entry.date, "EEE d.M.")}</div>
                     <span className={`badge ${entryTypeColor(entry.entry_type)}`}>{entryTypeLabel(entry.entry_type)}</span>
                     <input type="number" className="input w-20 text-sm py-1" value={editHours} onChange={e => setEditHours(e.target.value)} min="0.5" max="24" step="0.5" />
+                    {entry.entry_type === "work" && (
+                      <div className="flex items-center gap-1" title="Hodiny řízení">
+                        <Car className="w-4 h-4 text-sky-500 flex-shrink-0" />
+                        <input type="number" className="input w-20 text-sm py-1" value={editDriverHours} onChange={e => setEditDriverHours(e.target.value)} min="0" max="12" step="0.5" />
+                      </div>
+                    )}
                     <input type="text" className="input flex-1 text-sm py-1" value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="Poznámka..." />
-                    <button onClick={() => handleEditSave(entry.id)} className="btn-primary text-xs px-2 py-1"><Save className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleEditSave(entry.id, entry.entry_type === "work")} className="btn-primary text-xs px-2 py-1"><Save className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setEditingId(null)} className="btn-secondary text-xs px-2 py-1"><X className="w-3.5 h-3.5" /></button>
                   </div>
                 ) : (
@@ -164,10 +192,15 @@ export default function HoursPage() {
                       {entry.location && <span className="text-ink-400"> · {entry.location}</span>}
                       {entry.note && <span className="text-ink-500"> – {entry.note}</span>}
                     </div>
+                    {Number(entry.driver_hours) > 0 && (
+                      <span className="badge bg-sky-100 text-sky-800 flex-shrink-0 items-center gap-1" title="Hodiny řízení">
+                        <Car className="w-3 h-3" /> +{Number(entry.driver_hours)} h
+                      </span>
+                    )}
                     <div className="font-mono text-sm font-medium text-ink-900 flex-shrink-0">{Number(entry.hours)} h</div>
                     {(isAdmin || (!entry.is_locked && !isLocked)) && (
                       <div className="flex gap-1 flex-shrink-0">
-                        <button onClick={() => { setEditingId(entry.id); setEditHours(String(entry.hours)); setEditNote(entry.note || ""); }} className="text-ink-300 hover:text-brand-600"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => { setEditingId(entry.id); setEditHours(String(entry.hours)); setEditNote(entry.note || ""); setEditDriverHours(String(Number(entry.driver_hours) || 0)); }} className="text-ink-300 hover:text-brand-600"><Pencil className="w-4 h-4" /></button>
                         <button onClick={() => handleDelete(entry.id)} className="text-ink-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )}

@@ -53,23 +53,25 @@ export default function PayrollPage() {
     const myEntries = entries.filter(e => e.user_id === emp.id);
     const rate = Number(emp.hourly_rate) || 0;
     const sickPct = Number(emp.sick_rate_percent) || 60;
-    let workPay = 0, vacPay = 0, sickPay = 0, holidayPay = 0, workH = 0, vacD = 0, sickD = 0, dayOffD = 0, holidayH = 0;
+    let workPay = 0, vacPay = 0, sickPay = 0, holidayPay = 0, workH = 0, vacD = 0, sickD = 0, dayOffD = 0, holidayH = 0, driverH = 0;
     myEntries.forEach(e => {
       const h = Number(e.hours); const bp = Number(e.bonus_percent) || 100;
       const pay = calcDayPay(e.entry_type, h, rate, sickPct, bp);
+      driverH += Number(e.driver_hours || 0);
       if (e.entry_type === "work") { workH += h; workPay += pay; }
       else if (e.entry_type === "vacation") { vacD++; vacPay += pay; }
       else if (e.entry_type === "sick") { sickD++; sickPay += pay; }
       else if (e.entry_type === "holiday") { holidayH += h; holidayPay += pay; }
       else { dayOffD++; }
     });
-    const grossPay = workPay + vacPay + sickPay + holidayPay;
+    const driverPay = driverH * rate; // řízení = hodiny navíc za běžnou sazbu
+    const grossPay = workPay + driverPay + vacPay + sickPay + holidayPay;
     const loanDed = loans.filter(l => l.user_id === emp.id).reduce((s, l) => s + Number(l.monthly_deduction), 0);
     const myItems = payrollItems.filter(i => i.user_id === emp.id);
     const deductions = myItems.filter(i => i.type === "deduction").reduce((s, i) => s + Number(i.amount), 0);
     const bonuses = myItems.filter(i => i.type === "bonus").reduce((s, i) => s + Number(i.amount), 0);
     const netPay = grossPay - loanDed - deductions + bonuses;
-    return { workH, workPay, vacD, vacPay, sickD, sickPay, holidayH, holidayPay, dayOffD, grossPay, loanDed, deductions, bonuses, netPay, items: myItems };
+    return { workH, workPay, driverH, driverPay, vacD, vacPay, sickD, sickPay, holidayH, holidayPay, dayOffD, grossPay, loanDed, deductions, bonuses, netPay, items: myItems };
   }
 
   async function togglePaid(userId: string) {
@@ -120,13 +122,13 @@ export default function PayrollPage() {
   }
 
   function exportCSV() {
-    const headers = ["Zaměstnanec", "Práce (h)", "Práce (Kč)", "Dovolená (dní)", "Dovolená (Kč)", "Nemoc (dní)", "Nemoc (Kč)", "Svátek (h)", "Svátek (Kč)", "Hrubá mzda", "Splátky", "Srážky", "Prémie", "K výplatě", "Vyplaceno"];
+    const headers = ["Zaměstnanec", "Práce (h)", "Práce (Kč)", "Řízení (h)", "Řízení (Kč)", "Dovolená (dní)", "Dovolená (Kč)", "Nemoc (dní)", "Nemoc (Kč)", "Svátek (h)", "Svátek (Kč)", "Hrubá mzda", "Splátky", "Srážky", "Prémie", "K výplatě", "Vyplaceno"];
     const csvRows = employees.map(emp => {
       const r = calcRow(emp);
-      return [emp.full_name, r.workH, r.workPay, r.vacD, r.vacPay, r.sickD, r.sickPay, r.holidayH, r.holidayPay, r.grossPay, r.loanDed, r.deductions, r.bonuses, r.netPay, paidStatus[emp.id] ? "ANO" : "NE"].join(";");
+      return [emp.full_name, r.workH, r.workPay, r.driverH, r.driverPay, r.vacD, r.vacPay, r.sickD, r.sickPay, r.holidayH, r.holidayPay, r.grossPay, r.loanDed, r.deductions, r.bonuses, r.netPay, paidStatus[emp.id] ? "ANO" : "NE"].join(";");
     });
     const totalNet = employees.reduce((s, e) => s + calcRow(e).netPay, 0);
-    csvRows.push(["", "", "", "", "", "", "", "", "", "", "", "", "CELKEM", totalNet, ""].join(";"));
+    csvRows.push(["", "", "", "", "", "", "", "", "", "", "", "", "", "", "CELKEM", totalNet, ""].join(";"));
     const csv = "\uFEFF" + [headers.join(";"), ...csvRows].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
@@ -215,6 +217,7 @@ export default function PayrollPage() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm mb-3">
                 <div><span className="text-ink-400">Práce:</span> <span className="font-medium">{r.workH}h = {formatCurrency(r.workPay)}</span></div>
+                {r.driverH > 0 && <div><span className="text-sky-600">🚗 Řízení:</span> <span className="font-medium">{r.driverH}h = {formatCurrency(r.driverPay)}</span></div>}
                 <div><span className="text-ink-400">Dovolená:</span> <span className="font-medium">{r.vacD}d = {formatCurrency(r.vacPay)}</span></div>
                 <div><span className="text-ink-400">Nemoc:</span> <span className="font-medium">{r.sickD}d = {formatCurrency(r.sickPay)}</span></div>
                 {r.holidayH > 0 && <div><span className="text-red-500">Svátek:</span> <span className="font-medium">{r.holidayH}h = {formatCurrency(r.holidayPay)}</span></div>}
