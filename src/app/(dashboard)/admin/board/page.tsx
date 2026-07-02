@@ -293,7 +293,18 @@ export default function BoardPage() {
                     <option value="">--</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select></div>
                   <div><label className="label text-xs">Místo</label><input type="text" className="input" value={formLocation} onChange={e => setFormLocation(e.target.value)} /></div>
-                  <div><label className="label text-xs">🚗 Řízení (h) — 0 = neřídil</label><input type="number" className="input" value={formDriverHours} onChange={e => setFormDriverHours(e.target.value)} min="0" max="12" step="0.5" /></div>
+                  <div>
+                    <label className="label text-xs">🚗 Řízení (h) — 0 = neřídil</label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[0, 0.5, 1, 1.5, 2].map(v => (
+                        <button key={v} type="button" onClick={() => setFormDriverHours(String(v))}
+                          className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${parseFloat(formDriverHours) === v ? "bg-sky-50 border-sky-400 text-sky-700" : "bg-white border-surface-300 text-ink-500 hover:border-surface-400"}`}>
+                          {String(v).replace(".", ",")}
+                        </button>
+                      ))}
+                      <input type="number" className="input w-20 text-sm py-1.5" value={formDriverHours} onChange={e => setFormDriverHours(e.target.value)} min="0" max="12" step="0.5" title="Jiný počet hodin" />
+                    </div>
+                  </div>
                 </>}
                 <div><label className="label text-xs">Poznámka</label><input type="text" className="input" value={formNote} onChange={e => setFormNote(e.target.value)} /></div>
                 <div className="flex gap-2">

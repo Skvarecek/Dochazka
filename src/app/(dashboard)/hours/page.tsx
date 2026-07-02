@@ -24,7 +24,7 @@ export default function HoursPage() {
   const [formLocation, setFormLocation] = useState("");
   const [formNote, setFormNote] = useState("");
   const [formDriver, setFormDriver] = useState(false);
-  const [formDriverHours, setFormDriverHours] = useState("1");
+  const [formDriverHours, setFormDriverHours] = useState("0.5");
   const [formUserId, setFormUserId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -80,7 +80,7 @@ export default function HoursPage() {
       driver_hours: formType === "work" && formDriver ? parseFloat(formDriverHours) || 0 : 0,
     });
     if (error) { setSubmitError(error.message); }
-    else { setShowForm(false); setFormHours("8"); setFormType("work"); setFormProject(""); setFormLocation(""); setFormNote(""); setFormDriver(false); setFormDriverHours("1"); loadEntries(); }
+    else { setShowForm(false); setFormHours("8"); setFormType("work"); setFormProject(""); setFormLocation(""); setFormNote(""); setFormDriver(false); setFormDriverHours("0.5"); loadEntries(); }
     setSubmitting(false);
   }
 
@@ -149,9 +149,15 @@ export default function HoursPage() {
                   {formDriver && <Check className="w-4 h-4" />}
                 </button>
                 {formDriver && (
-                  <div className="flex items-center gap-2 animate-in">
-                    <label className="text-sm text-ink-500">Hodiny za volantem:</label>
-                    <input type="number" className="input w-24" value={formDriverHours} onChange={e => setFormDriverHours(e.target.value)} min="0.5" max="12" step="0.5" />
+                  <div className="flex items-center gap-2 flex-wrap animate-in">
+                    <label className="text-sm text-ink-500">Za volantem:</label>
+                    {[0.5, 1, 1.5, 2].map(v => (
+                      <button key={v} type="button" onClick={() => setFormDriverHours(String(v))}
+                        className={`px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all ${parseFloat(formDriverHours) === v ? "bg-sky-50 border-sky-400 text-sky-700" : "bg-white border-surface-300 text-ink-500 hover:border-surface-400"}`}>
+                        {String(v).replace(".", ",")} h
+                      </button>
+                    ))}
+                    <input type="number" className="input w-20" value={formDriverHours} onChange={e => setFormDriverHours(e.target.value)} min="0.5" max="12" step="0.5" title="Jiný počet hodin" />
                   </div>
                 )}
               </div>
