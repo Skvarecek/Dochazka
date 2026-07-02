@@ -46,7 +46,11 @@ export default function HoursPage() {
     setProjects(projRes.data || []);
     if (p?.role === "admin") {
       const empRes = await supabase.from("profiles").select("*").eq("is_hidden", false).order("full_name");
-      setEmployees(empRes.data || []);
+      const emps = empRes.data || [];
+      // Skrytý admin (majitel) v seznamu chybí — bez něj by controlled select
+      // naoko ukazoval prvního zaměstnance, zatímco state drží admina,
+      // a zápis „za kolegu" by se připsal adminovi.
+      setEmployees(emps.some((e: any) => e.id === p.id) ? emps : [p, ...emps]);
     }
   }
 
@@ -116,7 +120,7 @@ export default function HoursPage() {
           <Users className="w-5 h-5 text-ink-400" />
           <label className="text-sm font-medium text-ink-700">Zaměstnanec:</label>
           <select className="input w-auto" value={selectedUserId || ""} onChange={e => { setSelectedUserId(e.target.value); setFormUserId(e.target.value); }}>
-            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
+            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.id === profile?.id ? `Já (${emp.full_name})` : emp.full_name}</option>)}
           </select>
         </div>
       )}
@@ -131,7 +135,7 @@ export default function HoursPage() {
           <h3 className="font-display font-semibold text-lg mb-4">Nový záznam</h3>
           {submitError && <div className="mb-4 p-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200 flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{submitError}</div>}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isAdmin && <div><label className="label">Zaměstnanec</label><select className="input" value={formUserId} onChange={e => setFormUserId(e.target.value)}>{employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}</select></div>}
+            {isAdmin && <div><label className="label">Zaměstnanec</label><select className="input" value={formUserId} onChange={e => setFormUserId(e.target.value)}>{employees.map(emp => <option key={emp.id} value={emp.id}>{emp.id === profile?.id ? `Já (${emp.full_name})` : emp.full_name}</option>)}</select></div>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div><label className="label">Datum</label><input type="date" className="input" value={formDate} onChange={e => setFormDate(e.target.value)} required /></div>
               <div><label className="label">Hodiny</label><input type="number" className="input" value={formHours} onChange={e => setFormHours(e.target.value)} min="0.5" max="24" step="0.5" required /></div>
