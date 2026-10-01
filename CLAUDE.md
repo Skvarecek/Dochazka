@@ -61,3 +61,10 @@ created_at, created_by` + (od **migrace v3.5**) `status(todo|in_progress|done|ca
 `sort_order`. Při změně stavu drž `is_done`/`done_at` **v sync se `status`** (`done` ⇒ `is_done=true`).
 Stránka Úkoly: seznam ↔ kanban board (4 sloupce) s drag‑and‑drop (`@dnd-kit`), hledání + filtry,
 editace v modalu. Pouze pro adminy.
+
+## Datový model — dovolená
+Od **migrace v3.7**: `app_settings` (vždy jediný řádek `id = 1`) nese `default_vacation_days`
+(firemní výchozí nárok, default 21) a `profiles.vacation_days` vlastní nárok zaměstnance
+(`NULL` = platí výchozí). **Čerpání se neukládá** — počítá se jako počet záznamů
+`work_entries.entry_type = 'vacation'` v kalendářním roce (1 záznam = 1 den, stejně jako výplaty).
+UI: karta „Dovolená" nahoře na stránce Zaměstnanci (admin), s přepínačem roku.

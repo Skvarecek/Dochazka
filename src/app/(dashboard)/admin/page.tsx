@@ -3,7 +3,17 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import { formatCurrency } from "@/lib/utils";
-import { Shield, Save, Plus, Trash2, CreditCard, Banknote, UserPlus, X, Pencil, EyeOff, Eye } from "lucide-react";
+import { Shield, Save, Plus, Trash2, CreditCard, Banknote, UserPlus, X, Pencil, EyeOff, Eye, CalendarCheck, ChevronLeft, ChevronRight } from "lucide-react";
+
+const DEFAULT_VACATION_DAYS = 21;
+
+function fmtDays(n: number): string {
+  return String(Math.round(n * 10) / 10).replace(".", ",");
+}
+
+function draftOf(days: unknown): string {
+  return days == null ? "" : String(Number(days));
+}
 
 export default function AdminPage() {
   const supabase = createClient();
@@ -26,7 +36,17 @@ export default function AdminPage() {
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState("");
 
+  // Dovolená: firemní výchozí nárok, vlastní nárok per zaměstnanec, čerpání za rok
+  const [defaultVacation, setDefaultVacation] = useState(DEFAULT_VACATION_DAYS);
+  const [defaultVacationInput, setDefaultVacationInput] = useState(String(DEFAULT_VACATION_DAYS));
+  const [vacYear, setVacYear] = useState(new Date().getFullYear());
+  const [vacUsed, setVacUsed] = useState<Record<string, number>>({});
+  const [vacDraft, setVacDraft] = useState<Record<string, string>>({});
+  const [vacSaving, setVacSaving] = useState<string | null>(null);
+  const [vacMsg, setVacMsg] = useState<string | null>(null);
+
   useEffect(() => { loadData(); }, []);
+  useEffect(() => { if (profile?.role === "admin") loadVacationUsed(vacYear); }, [vacYear, profile]);
 
   async function loadData() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -34,13 +54,48 @@ export default function AdminPage() {
     const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).single();
     setProfile(p);
     if (p?.role !== "admin") { setLoading(false); return; }
-    const [empRes, loansRes] = await Promise.all([
+    const [empRes, loansRes, settingsRes] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("loans").select("*, profiles(full_name)").eq("is_paid_off", false).order("created_at", { ascending: false }),
+      supabase.from("app_settings").select("default_vacation_days").eq("id", 1).maybeSingle(),
     ]);
-    setEmployees(empRes.data || []);
+    const emps = empRes.data || [];
+    setEmployees(emps);
     setLoans(loansRes.data || []);
+    const dv = settingsRes.data?.default_vacation_days != null ? Number(settingsRes.data.default_vacation_days) : DEFAULT_VACATION_DAYS;
+    setDefaultVacation(dv);
+    setDefaultVacationInput(String(dv));
+    setVacDraft(Object.fromEntries(emps.map((e: any) => [e.id, draftOf(e.vacation_days)])));
     setLoading(false);
+  }
+
+  async function loadVacationUsed(year: number) {
+    const { data } = await supabase.from("work_entries").select("user_id")
+      .eq("entry_type", "vacation").gte("date", `${year}-01-01`).lte("date", `${year}-12-31`);
+    const used: Record<string, number> = {};
+    (data || []).forEach((e: any) => { used[e.user_id] = (used[e.user_id] || 0) + 1; });
+    setVacUsed(used);
+  }
+
+  async function saveDefaultVacation() {
+    const v = parseFloat(defaultVacationInput.replace(",", "."));
+    if (isNaN(v) || v < 0 || v > 365) { setVacMsg("Výchozí nárok musí být číslo 0–365."); return; }
+    setVacSaving("default"); setVacMsg(null);
+    const { error } = await supabase.from("app_settings").upsert({ id: 1, default_vacation_days: v });
+    setVacSaving(null);
+    if (error) { setVacMsg(`Uložení se nezdařilo: ${error.message}`); return; }
+    setDefaultVacation(v);
+  }
+
+  async function saveEmployeeVacation(empId: string) {
+    const raw = (vacDraft[empId] ?? "").trim().replace(",", ".");
+    const value = raw === "" ? null : parseFloat(raw);
+    if (value !== null && (isNaN(value) || value < 0 || value > 365)) { setVacMsg("Nárok musí být číslo 0–365 (prázdné = výchozí)."); return; }
+    setVacSaving(empId); setVacMsg(null);
+    const { error } = await supabase.from("profiles").update({ vacation_days: value }).eq("id", empId);
+    setVacSaving(null);
+    if (error) { setVacMsg(`Uložení se nezdařilo: ${error.message}`); return; }
+    setEmployees(prev => prev.map(e => e.id === empId ? { ...e, vacation_days: value } : e));
   }
 
   async function saveRates(emp: any) {
@@ -125,6 +180,85 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Dovolená — nárok a čerpání */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center"><CalendarCheck className="w-5 h-5 text-emerald-600" /></div>
+            <div>
+              <h3 className="font-display font-semibold text-ink-900">Dovolená</h3>
+              <p className="text-xs text-ink-500">Čerpáno = zapsané dny dovolené v roce {vacYear}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setVacYear(vacYear - 1)} className="btn-secondary p-1.5" title="Předchozí rok"><ChevronLeft className="w-4 h-4" /></button>
+            <span className="font-display font-semibold w-14 text-center">{vacYear}</span>
+            <button onClick={() => setVacYear(vacYear + 1)} className="btn-secondary p-1.5" title="Další rok"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap p-3 rounded-xl bg-surface-50 border border-surface-200 mb-3">
+          <label className="text-sm font-medium text-ink-700" htmlFor="defaultVacation">Výchozí nárok pro všechny:</label>
+          <input id="defaultVacation" type="number" className="input w-24 text-sm py-1.5" value={defaultVacationInput}
+            onChange={e => setDefaultVacationInput(e.target.value)} min="0" max="365" step="0.5" />
+          <span className="text-sm text-ink-500">dní</span>
+          {defaultVacationInput !== String(defaultVacation) && (
+            <button onClick={saveDefaultVacation} disabled={vacSaving === "default"} className="btn-primary text-xs px-3 py-1.5">
+              <Save className="w-3.5 h-3.5" /> {vacSaving === "default" ? "..." : "Uložit"}
+            </button>
+          )}
+          <p className="w-full text-xs text-ink-400">Platí pro každého, kdo nemá vyplněný vlastní nárok.</p>
+        </div>
+
+        {vacMsg && <div className="mb-3 p-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">{vacMsg}</div>}
+
+        <div className="divide-y divide-surface-100">
+          {employees.filter(e => !e.is_hidden).map(emp => {
+            const custom = emp.vacation_days != null;
+            const allowance = custom ? Number(emp.vacation_days) : defaultVacation;
+            const used = vacUsed[emp.id] || 0;
+            const remaining = allowance - used;
+            const pct = allowance > 0 ? Math.min(100, (used / allowance) * 100) : (used > 0 ? 100 : 0);
+            const draft = vacDraft[emp.id] ?? draftOf(emp.vacation_days);
+            const dirty = draft !== draftOf(emp.vacation_days);
+            return (
+              <div key={emp.id} className="py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex-1 min-w-[140px]">
+                  <p className="text-sm font-medium text-ink-900 truncate">{emp.full_name}</p>
+                  <div className="h-1.5 rounded-full bg-surface-200 mt-1.5 overflow-hidden">
+                    <div className={`h-full rounded-full ${remaining < 0 ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+                <div className="text-center w-16">
+                  <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Čerpáno</p>
+                  <p className="font-mono text-sm text-ink-900">{fmtDays(used)}</p>
+                </div>
+                <div className="w-32">
+                  <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider text-center">Nárok</p>
+                  <div className="flex items-center justify-center gap-1">
+                    <input type="number" className="input text-sm py-1 px-2 w-16 text-center" value={draft}
+                      placeholder={fmtDays(defaultVacation)} title="Prázdné = výchozí nárok"
+                      onChange={e => setVacDraft(prev => ({ ...prev, [emp.id]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === "Enter" && dirty) saveEmployeeVacation(emp.id); }}
+                      min="0" max="365" step="0.5" />
+                    {dirty && (
+                      <button onClick={() => saveEmployeeVacation(emp.id)} disabled={vacSaving === emp.id} className="btn-primary text-xs px-1.5 py-1" title="Uložit nárok">
+                        <Save className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-ink-400 text-center mt-0.5">{custom ? "vlastní" : "výchozí"}</p>
+                </div>
+                <div className="text-center w-16">
+                  <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Zbývá</p>
+                  <p className={`font-display font-bold text-lg ${remaining < 0 ? "text-red-600" : remaining <= 3 ? "text-amber-600" : "text-emerald-700"}`}>{fmtDays(remaining)}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="space-y-4">
         {employees.map(emp => (

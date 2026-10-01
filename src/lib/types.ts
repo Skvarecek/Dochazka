@@ -6,6 +6,7 @@ export type Profile = {
   hourly_rate: number;
   sick_rate_percent: number;
   is_hidden: boolean;
+  vacation_days: number | null; // null = firemní výchozí nárok (app_settings)
   created_at: string;
   updated_at: string;
 };
