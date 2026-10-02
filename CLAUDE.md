@@ -43,9 +43,10 @@ Uživatel **není vývojář** a git neřeší — git si řídí asistent. Post
 - `src/app/(dashboard)/` — chráněné stránky (sidebar layout):
   - `dashboard/`, `hours/` — uživatelské; `admin/` — admin sekce
     (`tasks`, `board` = měsíční mřížka, `payroll`, `projects`, `backup`, `page` = přehled).
-  - Přístup k `/admin/*` hlídá `admin/layout.tsx` (ne-admin vidí „Přístup odepřen");
-    výjimky jsou v `OPEN_TO_EMPLOYEES` tamtéž. Nová admin stránka je tím chráněná automaticky.
-    Je to jen UI zámek — skutečnou ochranu dat dělá RLS v Supabase.
+  - Přístup k `/admin/*` hlídá `admin/layout.tsx` (ne-admin vidí „Přístup odepřen"), bez
+    výjimek — i Nástěnka je jen pro adminy (rozhodnutí majitele 2. 10. 2026). Nová admin
+    stránka je tím chráněná automaticky. Je to jen UI zámek — skutečnou ochranu dat dělá RLS
+    v Supabase. Zaměstnanec má jen `dashboard/` a `hours/`.
 - `src/app/login/`, `src/app/auth/callback/` — přihlášení a OAuth callback.
 - `src/lib/` — `supabase-browser.ts`, `supabase-server.ts`, `types.ts`, `utils.ts`.
 - `src/middleware.ts` — auth middleware.
