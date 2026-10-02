@@ -33,7 +33,8 @@ Uživatel **není vývojář** a git neřeší — git si řídí asistent. Post
 1. **Měnit jen to, co je vyžádané. Nesahat na chod appky ani na data v Supabase.**
 2. **Změny DB jen jako bezpečné, *přidávající* migrace** v `supabase/migration-*.sql`
    (vzor: „BEZPEČNÉ: pouze přidává…"). **Migrace nikdy nespouštět proti produkční DB z kódu** —
-   uživatel je spustí ručně v **Supabase → SQL Editor**. Nikdy nemazat/neměnit existující sloupce
+   uživatel je spustí ručně v **Supabase → SQL Editor** (nebo je na jeho výslovné požádání spustí
+   asistent přes SQL Editor v jeho prohlížeči). Nikdy nemazat/neměnit existující sloupce
    bez výslovného zadání.
 3. **Profesionální úroveň grafiky i kódu**, sjednocené s designem appky (viz tokeny níže).
 4. **Neměnit UX/workflow bez vyžádání.**
@@ -42,7 +43,9 @@ Uživatel **není vývojář** a git neřeší — git si řídí asistent. Post
 - `src/app/(dashboard)/` — chráněné stránky (sidebar layout):
   - `dashboard/`, `hours/` — uživatelské; `admin/` — admin sekce
     (`tasks`, `board` = měsíční mřížka, `payroll`, `projects`, `backup`, `page` = přehled).
-  - Admin stránky gateují přes `profile.role === "admin"`.
+  - Přístup k `/admin/*` hlídá `admin/layout.tsx` (ne-admin vidí „Přístup odepřen");
+    výjimky jsou v `OPEN_TO_EMPLOYEES` tamtéž. Nová admin stránka je tím chráněná automaticky.
+    Je to jen UI zámek — skutečnou ochranu dat dělá RLS v Supabase.
 - `src/app/login/`, `src/app/auth/callback/` — přihlášení a OAuth callback.
 - `src/lib/` — `supabase-browser.ts`, `supabase-server.ts`, `types.ts`, `utils.ts`.
 - `src/middleware.ts` — auth middleware.
@@ -61,6 +64,14 @@ created_at, created_by` + (od **migrace v3.5**) `status(todo|in_progress|done|ca
 `sort_order`. Při změně stavu drž `is_done`/`done_at` **v sync se `status`** (`done` ⇒ `is_done=true`).
 Stránka Úkoly: seznam ↔ kanban board (4 sloupce) s drag‑and‑drop (`@dnd-kit`), hledání + filtry,
 editace v modalu. Pouze pro adminy.
+
+## Zabezpečení profilů (`profiles`)
+RLS dovoluje uživateli zapsat do vlastního řádku cokoli (`profiles_update_own`,
+`profiles_insert`). Od **migrace v3.8** proto trigger `protect_profile_admin_fields` ne-adminům
+zamyká `role`, `hourly_rate`, `sick_rate_percent`, `is_hidden` a `vacation_days` (jméno měnit
+smí; admin a SQL Editor nejsou omezeni). **Přidáš-li do `profiles` další citlivý sloupec, doplň
+ho do seznamu ve funkci triggeru.** Číst profily (včetně sazeb) smí dál každý přihlášený
+(`profiles_select USING true`) — to je známý, zatím neřešený dluh.
 
 ## Datový model — dovolená
 Od **migrace v3.7**: `app_settings` (vždy jediný řádek `id = 1`) nese `default_vacation_days`
