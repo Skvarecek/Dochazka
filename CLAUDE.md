@@ -57,6 +57,10 @@ Uživatel **není vývojář** a git neřeší — git si řídí asistent. Post
 - Design tokeny (Tailwind): accent **`brand`** (indigová `#4c6ef5`), neutrály `surface` a `ink`.
   Komponentní třídy: `card`, `btn-primary` / `btn-secondary` / `btn-danger`, `input`, `label`,
   `badge`, animace `animate-in`. Fonty: **DM Sans** (text), **Outfit** (`font-display`).
+- **Modální okna:** overlay `fixed inset-0 z-50 !mt-0 flex items-center justify-center … p-4`,
+  karta `card … max-h-full overflow-y-auto`. `!mt-0` je nutné — stránky mají kořen se
+  `space-y-*`, který by fixnímu overlayi přidal horní margin (nezakrytý proužek nahoře, okno
+  mimo střed). `max-h-full overflow-y-auto` drží tlačítka dosažitelná i na nízké obrazovce.
 - `package-lock.json` se **necommituje** (repo lockfile nemá, Vercel řeší `npm install`).
 
 ## Datový model — úkoly (`tasks`)

@@ -383,8 +383,8 @@ export default function AdminPage() {
       </div>
 
       {showLoanForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm" onClick={() => setShowLoanForm(false)}>
-          <div className="card p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 !mt-0 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm p-4" onClick={() => setShowLoanForm(false)}>
+          <div className="card p-6 w-full max-w-md max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-display font-semibold text-lg mb-4">Nová půjčka</h3>
             <p className="text-sm text-ink-500 mb-4">Pro: {employees.find(e => e.id === activeEmployee)?.full_name}</p>
             <div className="space-y-3">

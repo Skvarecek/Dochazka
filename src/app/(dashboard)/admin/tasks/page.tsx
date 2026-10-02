@@ -323,8 +323,8 @@ export default function TasksPage() {
 
       {/* Editor modal */}
       {editor.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm p-4" onClick={closeEditor}>
-          <div className="card p-6 w-full max-w-lg animate-in" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 !mt-0 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm p-4" onClick={closeEditor}>
+          <div className="card p-6 w-full max-w-lg max-h-full overflow-y-auto animate-in" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display font-semibold text-lg">{editor.task ? "Upravit úkol" : "Nový úkol"}</h3>
               <button onClick={closeEditor} className="text-ink-400 hover:text-ink-700"><X className="w-5 h-5" /></button>

@@ -263,8 +263,8 @@ export default function BoardPage() {
       {editing && (() => {
         const holidayName = isCzechHoliday(editing.date);
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm" onClick={() => setEditing(null)}>
-            <div className="card p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 !mt-0 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm p-4" onClick={() => setEditing(null)}>
+            <div className="card p-6 w-full max-w-md max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="font-display font-semibold text-lg">
