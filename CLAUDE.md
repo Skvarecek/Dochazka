@@ -67,4 +67,8 @@ Od **migrace v3.7**: `app_settings` (vždy jediný řádek `id = 1`) nese `defau
 (firemní výchozí nárok, default 21) a `profiles.vacation_days` vlastní nárok zaměstnance
 (`NULL` = platí výchozí). **Čerpání se neukládá** — počítá se jako počet záznamů
 `work_entries.entry_type = 'vacation'` v kalendářním roce (1 záznam = 1 den, stejně jako výplaty).
-UI: karta „Dovolená" nahoře na stránce Zaměstnanci (admin), s přepínačem roku.
+UI na stránce Zaměstnanci (admin): nahoře rozklikávací „Přehled dovolené" (jen na čtení, stav
+rozbalení v `localStorage`, přepínač roku, editace výchozího nároku); vlastní nárok se edituje
+v kartě zaměstnance vedle sazeb a ukládá tlačítkem „Uložit"; pod tím řádek „Dovolená {rok}"
+se zbývajícími dny. `vacation_days` se do update posílá **jen při změně**, aby uložení sazeb
+nezáviselo na migraci.
