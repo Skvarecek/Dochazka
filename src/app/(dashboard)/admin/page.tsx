@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import { formatCurrency } from "@/lib/utils";
 import { Shield, Save, Plus, Trash2, CreditCard, Banknote, UserPlus, X, Pencil, EyeOff, Eye, CalendarCheck, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
@@ -12,14 +12,22 @@ function fmtDays(n: number): string {
   return String(Math.round(n * 10) / 10).replace(".", ",").replace("-", "−");
 }
 
-// Kódy PostgREST/Postgres pro chybějící tabulku nebo sloupec = migrace v3.7 ještě neproběhla.
+// Kódy PostgREST/Postgres pro chybějící tabulku nebo sloupec = příslušná migrace ještě neproběhla.
 const MISSING_SCHEMA_CODES = ["PGRST204", "PGRST205", "42703", "42P01"];
 
-function saveErrorText(error: { code?: string; message: string }): string {
+function saveErrorText(error: { code?: string; message: string }, migration = "v3.7"): string {
   if (MISSING_SCHEMA_CODES.includes(error.code ?? "")) {
-    return "Dovolenou zatím nejde uložit — databáze na ni není připravená. V Supabase (SQL Editor) je potřeba spustit migraci v3.7.";
+    return `Dovolenou zatím nejde uložit — databáze na ni není připravená. V Supabase (SQL Editor) je potřeba spustit migraci ${migration}.`;
   }
   return `Uložení se nezdařilo: ${error.message}`;
+}
+
+function signedDays(n: number): string {
+  return `${n > 0 ? "+" : ""}${fmtDays(n)}`;
+}
+
+function parseDays(text: string): number {
+  return parseFloat(text.trim().replace(",", "."));
 }
 
 function daysWord(n: number): string {
@@ -65,6 +73,12 @@ export default function AdminPage() {
   const [vacMsg, setVacMsg] = useState<string | null>(null);
   const [vacOpen, setVacOpen] = useState(false);
   const [empMsg, setEmpMsg] = useState<{ id: string; text: string } | null>(null);
+  // Ruční úprava čerpání za zvolený rok (čerpáno = dny z docházky + days)
+  const [vacAdjust, setVacAdjust] = useState<Record<string, { days: number; note: string | null }>>({});
+  const [vacEdit, setVacEdit] = useState<{ emp: any; total: string; note: string } | null>(null);
+  const [vacEditSaving, setVacEditSaving] = useState(false);
+  const [vacEditMsg, setVacEditMsg] = useState<string | null>(null);
+  const vacRequest = useRef(0);
 
   useEffect(() => { loadData(); }, []);
   useEffect(() => { if (profile?.role === "admin") loadVacationUsed(vacYear); }, [vacYear, profile]);
@@ -81,12 +95,15 @@ export default function AdminPage() {
   function vacationOf(emp: any) {
     const custom = emp.vacation_days != null;
     const allowance = custom ? Number(emp.vacation_days) : defaultVacation;
-    const used = vacUsed[emp.id] || 0;
+    const logged = vacUsed[emp.id] || 0;
+    const adjust = vacAdjust[emp.id]?.days || 0;
+    // Záporná úprava může po smazání záznamů v docházce přesáhnout zapsané dny.
+    const used = Math.max(0, Math.round((logged + adjust) * 10) / 10);
     const remaining = allowance - used;
     const pct = allowance > 0 ? Math.min(100, (used / allowance) * 100) : (used > 0 ? 100 : 0);
     const tone = remaining < 0 ? "text-red-600" : remaining <= 3 ? "text-amber-600" : "text-emerald-700";
     const bar = remaining < 0 ? "bg-red-500" : "bg-emerald-500";
-    return { custom, allowance, used, remaining, pct, tone, bar };
+    return { custom, allowance, logged, adjust, used, remaining, pct, tone, bar };
   }
 
   async function loadData() {
@@ -111,11 +128,49 @@ export default function AdminPage() {
   }
 
   async function loadVacationUsed(year: number) {
-    const { data } = await supabase.from("work_entries").select("user_id")
-      .eq("entry_type", "vacation").gte("date", `${year}-01-01`).lte("date", `${year}-12-31`);
+    const request = ++vacRequest.current;
+    const [entriesRes, adjustRes] = await Promise.all([
+      supabase.from("work_entries").select("user_id")
+        .eq("entry_type", "vacation").gte("date", `${year}-01-01`).lte("date", `${year}-12-31`),
+      supabase.from("vacation_adjustments").select("user_id, days, note").eq("year", year),
+    ]);
+    // Při rychlém přepínání roku nesmí starší odpověď přepsat novější.
+    if (request !== vacRequest.current) return;
     const used: Record<string, number> = {};
-    (data || []).forEach((e: any) => { used[e.user_id] = (used[e.user_id] || 0) + 1; });
+    (entriesRes.data || []).forEach((e: any) => { used[e.user_id] = (used[e.user_id] || 0) + 1; });
     setVacUsed(used);
+    const adjust: Record<string, { days: number; note: string | null }> = {};
+    (adjustRes.data || []).forEach((a: any) => { adjust[a.user_id] = { days: Number(a.days), note: a.note }; });
+    setVacAdjust(adjust);
+  }
+
+  function openVacEdit(emp: any) {
+    setVacEditMsg(null);
+    setVacEdit({ emp, total: String(vacationOf(emp).used), note: vacAdjust[emp.id]?.note || "" });
+  }
+
+  async function saveVacEdit() {
+    if (!vacEdit || vacEditSaving) return;
+    const { emp } = vacEdit;
+    const total = parseDays(vacEdit.total);
+    if (isNaN(total) || total < 0 || total > 366) { setVacEditMsg("Čerpáno musí být číslo 0–366."); return; }
+    const days = Math.round((total - (vacUsed[emp.id] || 0)) * 10) / 10;
+    const note = vacEdit.note.trim() || null;
+    setVacEditSaving(true); setVacEditMsg(null);
+    // Nulový rozdíl = žádná ruční úprava, řádek se maže.
+    const { error } = days === 0
+      ? await supabase.from("vacation_adjustments").delete().eq("user_id", emp.id).eq("year", vacYear)
+      : await supabase.from("vacation_adjustments").upsert(
+          { user_id: emp.id, year: vacYear, days, note, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,year" });
+    setVacEditSaving(false);
+    if (error) { setVacEditMsg(saveErrorText(error, "v3.9")); return; }
+    setVacAdjust(prev => {
+      const next = { ...prev };
+      if (days === 0) delete next[emp.id]; else next[emp.id] = { days, note };
+      return next;
+    });
+    setVacEdit(null);
   }
 
   async function saveDefaultVacation() {
@@ -229,7 +284,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Přehled dovolené — rozklikávací, jen na čtení (vlastní nárok se edituje v kartě zaměstnance) */}
+      {/* Přehled dovolené — rozklikávací; nárok se edituje v kartě zaměstnance, čerpání kliknutím na číslo */}
       <div className="card overflow-hidden">
         <button type="button" onClick={toggleVacOpen} aria-expanded={vacOpen}
           className="w-full flex items-center gap-3 p-5 text-left hover:bg-surface-50 transition-colors">
@@ -244,7 +299,7 @@ export default function AdminPage() {
         {vacOpen && (
           <div className="px-5 pb-5 animate-in">
             <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-              <p className="text-xs text-ink-500">Čerpáno = zapsané dny dovolené v roce {vacYear}</p>
+              <p className="text-xs text-ink-500">Čerpáno = dny dovolené zapsané v docházce v roce {vacYear}. Číslo upravíš kliknutím na něj.</p>
               <div className="flex items-center gap-1">
                 <button onClick={() => setVacYear(vacYear - 1)} className="btn-secondary p-1.5" title="Předchozí rok"><ChevronLeft className="w-4 h-4" /></button>
                 <span className="font-display font-semibold w-14 text-center">{vacYear}</span>
@@ -278,18 +333,25 @@ export default function AdminPage() {
                         <div className={`h-full rounded-full ${v.bar}`} style={{ width: `${v.pct}%` }} />
                       </div>
                     </div>
-                    <div className="text-center w-16">
-                      <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Čerpáno</p>
-                      <p className="font-mono text-sm text-ink-900">{fmtDays(v.used)}</p>
-                    </div>
-                    <div className="text-center w-16">
-                      <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Nárok</p>
-                      <p className="font-mono text-sm text-ink-900">{fmtDays(v.allowance)}</p>
-                      <p className="text-[10px] text-ink-400">{v.custom ? "vlastní" : "výchozí"}</p>
-                    </div>
-                    <div className="text-center w-16">
-                      <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Zbývá</p>
-                      <p className={`font-display font-bold text-lg ${v.tone}`}>{fmtDays(v.remaining)}</p>
+                    <div className="flex items-center gap-3 ml-auto">
+                      <button type="button" onClick={() => openVacEdit(emp)} title="Upravit čerpanou dovolenou"
+                        className="group text-center w-20 py-1 rounded-lg hover:bg-surface-100 transition-colors">
+                        <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Čerpáno</p>
+                        <p className="font-mono text-sm text-ink-900 inline-flex items-center gap-1">
+                          {fmtDays(v.used)}
+                          <Pencil className="w-3 h-3 text-ink-300 group-hover:text-brand-600" />
+                        </p>
+                        <p className="text-[10px] text-ink-400">{v.adjust !== 0 ? `${signedDays(v.adjust)} ručně` : "z docházky"}</p>
+                      </button>
+                      <div className="text-center w-16">
+                        <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Nárok</p>
+                        <p className="font-mono text-sm text-ink-900">{fmtDays(v.allowance)}</p>
+                        <p className="text-[10px] text-ink-400">{v.custom ? "vlastní" : "výchozí"}</p>
+                      </div>
+                      <div className="text-center w-16">
+                        <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Zbývá</p>
+                        <p className={`font-display font-bold text-lg ${v.tone}`}>{fmtDays(v.remaining)}</p>
+                      </div>
                     </div>
                   </div>
                 );
@@ -356,7 +418,8 @@ export default function AdminPage() {
                       <span className="text-ink-700">{v.remaining < 0 ? "přečerpáno o" : "zbývá"}</span>
                       <span className={`font-semibold ${v.tone}`}>{fmtDays(Math.abs(v.remaining))} {daysWord(v.remaining)}</span>
                       <span className="text-ink-500">z {fmtDays(v.allowance)}{v.custom ? " (vlastní nárok)" : ""}</span>
-                      <span className="text-ink-400">(čerpáno {fmtDays(v.used)})</span>
+                      <span className="text-ink-400">(čerpáno {fmtDays(v.used)}{v.adjust > 0 ? `, z toho ${fmtDays(v.adjust)} ručně` : v.adjust < 0 ? `, ruční úprava ${fmtDays(v.adjust)}` : ""})</span>
+                      <button type="button" onClick={() => openVacEdit(emp)} className="text-ink-300 hover:text-brand-600" title="Upravit čerpanou dovolenou"><Pencil className="w-3.5 h-3.5" /></button>
                       <div className="ml-auto h-1.5 w-28 rounded-full bg-surface-200 overflow-hidden">
                         <div className={`h-full rounded-full ${v.bar}`} style={{ width: `${v.pct}%` }} />
                       </div>
@@ -381,6 +444,49 @@ export default function AdminPage() {
           </div>
         ))}
       </div>
+
+      {vacEdit && (() => {
+        const logged = vacUsed[vacEdit.emp.id] || 0;
+        const total = parseDays(vacEdit.total);
+        const diff = isNaN(total) ? null : Math.round((total - logged) * 10) / 10;
+        return (
+          <div className="fixed inset-0 z-50 !mt-0 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm p-4" onClick={() => setVacEdit(null)}>
+            <div className="card p-6 w-full max-w-md max-h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-display font-semibold text-lg">Čerpaná dovolená {vacYear}</h3>
+                <button onClick={() => setVacEdit(null)} className="text-ink-400 hover:text-ink-700" title="Zavřít"><X className="w-5 h-5" /></button>
+              </div>
+              <p className="text-sm text-ink-500 mb-4">{vacEdit.emp.full_name}</p>
+              {vacEditMsg && <div className="mb-3 p-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">{vacEditMsg}</div>}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm p-3 rounded-xl bg-surface-50 border border-surface-200">
+                  <span className="text-ink-500">Zapsáno v docházce</span>
+                  <span className="font-mono text-ink-900">{fmtDays(logged)} {daysWord(logged)}</span>
+                </div>
+                <div>
+                  <label className="label" htmlFor="vacTotal">Čerpáno celkem (dní)</label>
+                  <input id="vacTotal" type="number" className="input" value={vacEdit.total} autoFocus
+                    onChange={e => setVacEdit({ ...vacEdit, total: e.target.value })}
+                    onKeyDown={e => { if (e.key === "Enter") saveVacEdit(); }} min="0" max="366" step="0.5" />
+                  <p className="text-xs text-ink-500 mt-1.5">
+                    {diff === null ? "Zadej počet dní." : diff === 0 ? "Odpovídá docházce, bez ruční úpravy." : `Ruční úprava ${signedDays(diff)} ${daysWord(diff)} oproti docházce.`}
+                  </p>
+                </div>
+                <div>
+                  <label className="label" htmlFor="vacNote">Poznámka (volitelné)</label>
+                  <input id="vacNote" type="text" className="input" value={vacEdit.note}
+                    onChange={e => setVacEdit({ ...vacEdit, note: e.target.value })} placeholder="např. dovolená před appkou" />
+                </div>
+                <p className="text-xs text-ink-400">Ukládá se jen rozdíl oproti docházce, takže nově zapsané dny dovolené se dál přičítají samy. Jednotlivé dny se zapisují a opravují na Nástěnce. Výplat se úprava netýká.</p>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={saveVacEdit} disabled={vacEditSaving} className="btn-primary flex-1"><Save className="w-4 h-4" /> {vacEditSaving ? "..." : "Uložit"}</button>
+                  {diff !== 0 && <button type="button" onClick={() => setVacEdit({ ...vacEdit, total: String(logged) })} className="btn-secondary text-sm">Podle docházky</button>}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showLoanForm && (
         <div className="fixed inset-0 z-50 !mt-0 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm p-4" onClick={() => setShowLoanForm(false)}>

@@ -50,7 +50,7 @@ Uživatel **není vývojář** a git neřeší — git si řídí asistent. Post
 - `src/app/login/`, `src/app/auth/callback/` — přihlášení a OAuth callback.
 - `src/lib/` — `supabase-browser.ts`, `supabase-server.ts`, `types.ts`, `utils.ts`.
 - `src/middleware.ts` — auth middleware.
-- `supabase/` — `schema*.sql` + `migration-*.sql` (postupné verze v2.1 … v3.5).
+- `supabase/` — `schema*.sql` + `migration-*.sql` (postupné verze v2.1 … v3.9).
 
 ## Konvence
 - **UI texty česky, identifikátory v kódu anglicky.**
@@ -81,10 +81,17 @@ ho do seznamu ve funkci triggeru.** Číst profily (včetně sazeb) smí dál ka
 ## Datový model — dovolená
 Od **migrace v3.7**: `app_settings` (vždy jediný řádek `id = 1`) nese `default_vacation_days`
 (firemní výchozí nárok, default 21) a `profiles.vacation_days` vlastní nárok zaměstnance
-(`NULL` = platí výchozí). **Čerpání se neukládá** — počítá se jako počet záznamů
+(`NULL` = platí výchozí). **Čerpání z docházky se neukládá** — počítá se jako počet záznamů
 `work_entries.entry_type = 'vacation'` v kalendářním roce (1 záznam = 1 den, stejně jako výplaty).
-UI na stránce Zaměstnanci (admin): nahoře rozklikávací „Přehled dovolené" (jen na čtení, stav
-rozbalení v `localStorage`, přepínač roku, editace výchozího nároku); vlastní nárok se edituje
+Od **migrace v3.9** k tomu `vacation_adjustments` (`user_id, year, days, note`, PK `user_id+year`)
+drží **ruční korekci** — kladnou i zápornou, např. dovolenou vybranou před zavedením appky:
+**čerpáno = dny z docházky + `days`** (nikdy pod nulu). Ukládá se jen rozdíl, takže nově zapsané
+dny se dál přičítají samy; nulový rozdíl řádek maže. Zapisovat smí jen admin, zaměstnanec svůj
+řádek jen čte. Výplat se úprava netýká.
+UI na stránce Zaměstnanci (admin): nahoře rozklikávací „Přehled dovolené" (stav rozbalení
+v `localStorage`, přepínač roku, editace výchozího nároku; klik na číslo „Čerpáno" nebo tužka
+v kartě zaměstnance otevře okno, kde se zadá skutečný součet); vlastní nárok se edituje
 v kartě zaměstnance vedle sazeb a ukládá tlačítkem „Uložit"; pod tím řádek „Dovolená {rok}"
 se zbývajícími dny. `vacation_days` se do update posílá **jen při změně**, aby uložení sazeb
-nezáviselo na migraci.
+nezáviselo na migraci; stejně tak chybějící `vacation_adjustments` přehled nerozbije (úprava je
+pak nulová a uložení ohlásí, kterou migraci spustit).
